@@ -1,0 +1,634 @@
+{
+  "metadata": {
+    "project": "Riwi Internal Messenger",
+    "version": "1.0.0",
+    "database": "PostgreSQL",
+    "purpose": "Document the domain model, implicit business rules, normalization decisions and initial test data."
+  },
+
+  "entities": [
+    {
+      "name": "rw_users",
+      "description": "Authenticated application users.",
+      "primary_key": "rw_user_id",
+      "attributes": [
+        {
+          "name": "rw_user_id",
+          "type": "uuid",
+          "nullable": false,
+          "key": "PK"
+        },
+        {
+          "name": "rw_email",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "rw_password_hash",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "rw_full_name",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "rw_role_title",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "rw_created_at",
+          "type": "timestamptz",
+          "nullable": false
+        },
+        {
+          "name": "rw_deleted_at",
+          "type": "timestamptz",
+          "nullable": true
+        }
+      ],
+      "business_rules": [
+        "A user is never physically deleted during normal operation.",
+        "Active users must have a unique email address.",
+        "A user can belong to multiple channels.",
+        "A user can create multiple messages.",
+        "A user can have multiple copilot queries.",
+        "A user can have multiple refresh tokens."
+      ]
+    },
+
+    {
+      "name": "rw_channels",
+      "description": "Conversation channels available to users according to their membership.",
+      "primary_key": "rw_channel_id",
+      "attributes": [
+        {
+          "name": "rw_channel_id",
+          "type": "uuid",
+          "nullable": false,
+          "key": "PK"
+        },
+        {
+          "name": "rw_name",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "rw_is_private",
+          "type": "boolean",
+          "nullable": false
+        },
+        {
+          "name": "rw_created_at",
+          "type": "timestamptz",
+          "nullable": false
+        }
+      ],
+      "business_rules": [
+        "A channel must have a non-empty name.",
+        "Access to private channels is controlled through channel membership."
+      ]
+    },
+
+    {
+      "name": "rw_channel_members",
+      "description": "Associative entity representing channel membership.",
+      "primary_key": [
+        "rw_channel_id",
+        "rw_user_id"
+      ],
+      "attributes": [
+        {
+          "name": "rw_channel_id",
+          "type": "uuid",
+          "nullable": false,
+          "key": "PK/FK"
+        },
+        {
+          "name": "rw_user_id",
+          "type": "uuid",
+          "nullable": false,
+          "key": "PK/FK"
+        },
+        {
+          "name": "rw_role_in_channel",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "rw_joined_at",
+          "type": "timestamptz",
+          "nullable": false
+        }
+      ],
+      "business_rules": [
+        "A user can belong to a channel only once.",
+        "A user must be a channel member to access its protected conversation.",
+        "A channel can have multiple members.",
+        "A user can belong to multiple channels.",
+        "The role within a channel can be member or admin."
+      ]
+    },
+
+    {
+      "name": "rw_messages",
+      "description": "Messages created by users inside channels.",
+      "primary_key": "rw_message_id",
+      "attributes": [
+        {
+          "name": "rw_message_id",
+          "type": "uuid",
+          "nullable": false,
+          "key": "PK"
+        },
+        {
+          "name": "rw_channel_id",
+          "type": "uuid",
+          "nullable": false,
+          "key": "FK"
+        },
+        {
+          "name": "rw_author_id",
+          "type": "uuid",
+          "nullable": false,
+          "key": "FK"
+        },
+        {
+          "name": "rw_body",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "rw_is_edited",
+          "type": "boolean",
+          "nullable": false
+        },
+        {
+          "name": "rw_created_at",
+          "type": "timestamptz",
+          "nullable": false
+        },
+        {
+          "name": "rw_edited_at",
+          "type": "timestamptz",
+          "nullable": true
+        },
+        {
+          "name": "rw_deleted_at",
+          "type": "timestamptz",
+          "nullable": true
+        }
+      ],
+      "business_rules": [
+        "A message belongs to exactly one channel.",
+        "A message has exactly one author.",
+        "Message content cannot be blank.",
+        "Messages are soft deleted.",
+        "Editing a message preserves its original record.",
+        "A user must have access to the channel to interact with its messages."
+      ]
+    },
+
+    {
+      "name": "rw_message_status",
+      "description": "Read status of messages for individual users.",
+      "primary_key": [
+        "rw_message_id",
+        "rw_user_id"
+      ],
+      "attributes": [
+        {
+          "name": "rw_message_id",
+          "type": "uuid",
+          "nullable": false,
+          "key": "PK/FK"
+        },
+        {
+          "name": "rw_user_id",
+          "type": "uuid",
+          "nullable": false,
+          "key": "PK/FK"
+        },
+        {
+          "name": "rw_read_at",
+          "type": "timestamptz",
+          "nullable": false
+        }
+      ],
+      "business_rules": [
+        "A user can have at most one read status per message.",
+        "Read status only makes sense for an existing message and user."
+      ]
+    },
+
+    {
+      "name": "rw_message_embeddings",
+      "description": "Vector and full-text search representation associated with a message.",
+      "primary_key": "rw_message_id",
+      "attributes": [
+        {
+          "name": "rw_message_id",
+          "type": "uuid",
+          "nullable": false,
+          "key": "PK/FK"
+        },
+        {
+          "name": "rw_embedding",
+          "type": "vector(1536)",
+          "nullable": false
+        },
+        {
+          "name": "rw_search_vector",
+          "type": "tsvector",
+          "nullable": true
+        },
+        {
+          "name": "rw_updated_at",
+          "type": "timestamptz",
+          "nullable": false
+        }
+      ],
+      "business_rules": [
+        "Each message can have at most one embedding.",
+        "An embedding cannot exist without its message.",
+        "Embeddings support semantic retrieval for the copilot."
+      ]
+    },
+
+    {
+      "name": "rw_copilot_queries",
+      "description": "Questions submitted by authenticated users to the AI copilot.",
+      "primary_key": "rw_query_id",
+      "attributes": [
+        {
+          "name": "rw_query_id",
+          "type": "uuid",
+          "nullable": false,
+          "key": "PK"
+        },
+        {
+          "name": "rw_user_id",
+          "type": "uuid",
+          "nullable": false,
+          "key": "FK"
+        },
+        {
+          "name": "rw_prompt",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "rw_response",
+          "type": "text",
+          "nullable": true
+        },
+        {
+          "name": "rw_tokens_used",
+          "type": "integer",
+          "nullable": false
+        },
+        {
+          "name": "rw_created_at",
+          "type": "timestamptz",
+          "nullable": false
+        }
+      ],
+      "business_rules": [
+        "A copilot query belongs to one authenticated user.",
+        "A user can have multiple copilot queries.",
+        "Token consumption cannot be negative."
+      ]
+    },
+
+    {
+      "name": "rw_query_sources",
+      "description": "Associates copilot queries with the messages used as evidence.",
+      "primary_key": [
+        "rw_query_id",
+        "rw_message_id"
+      ],
+      "attributes": [
+        {
+          "name": "rw_query_id",
+          "type": "uuid",
+          "nullable": false,
+          "key": "PK/FK"
+        },
+        {
+          "name": "rw_message_id",
+          "type": "uuid",
+          "nullable": false,
+          "key": "PK/FK"
+        },
+        {
+          "name": "rw_relevance_score",
+          "type": "numeric(5,4)",
+          "nullable": true
+        }
+      ],
+      "business_rules": [
+        "A query can reference multiple source messages.",
+        "A message can be used as a source for multiple queries.",
+        "Relevance score, when present, must be between 0 and 1."
+      ]
+    },
+
+    {
+      "name": "rw_refresh_tokens",
+      "description": "Refresh tokens associated with authenticated users.",
+      "primary_key": "rw_token_id",
+      "attributes": [
+        {
+          "name": "rw_token_id",
+          "type": "uuid",
+          "nullable": false,
+          "key": "PK"
+        },
+        {
+          "name": "rw_user_id",
+          "type": "uuid",
+          "nullable": false,
+          "key": "FK"
+        },
+        {
+          "name": "rw_token_hash",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "rw_created_at",
+          "type": "timestamptz",
+          "nullable": false
+        },
+        {
+          "name": "rw_expires_at",
+          "type": "timestamptz",
+          "nullable": false
+        },
+        {
+          "name": "rw_revoked",
+          "type": "boolean",
+          "nullable": false
+        }
+      ],
+      "business_rules": [
+        "Refresh tokens belong to a user.",
+        "A refresh token must expire after it is created.",
+        "Revoked tokens cannot be used for authentication."
+      ]
+    }
+  ],
+
+  "relationships": [
+    {
+      "from": "rw_users",
+      "to": "rw_channel_members",
+      "cardinality": "1:N",
+      "description": "A user can belong to multiple channels."
+    },
+    {
+      "from": "rw_channels",
+      "to": "rw_channel_members",
+      "cardinality": "1:N",
+      "description": "A channel can have multiple members."
+    },
+    {
+      "from": "rw_users",
+      "to": "rw_messages",
+      "cardinality": "1:N",
+      "description": "A user can author multiple messages."
+    },
+    {
+      "from": "rw_channels",
+      "to": "rw_messages",
+      "cardinality": "1:N",
+      "description": "A channel contains multiple messages."
+    },
+    {
+      "from": "rw_messages",
+      "to": "rw_message_status",
+      "cardinality": "1:N",
+      "description": "A message can have read status records for multiple users."
+    },
+    {
+      "from": "rw_users",
+      "to": "rw_message_status",
+      "cardinality": "1:N",
+      "description": "A user can have read status records for multiple messages."
+    },
+    {
+      "from": "rw_messages",
+      "to": "rw_message_embeddings",
+      "cardinality": "1:0..1",
+      "description": "A message can have at most one embedding."
+    },
+    {
+      "from": "rw_users",
+      "to": "rw_copilot_queries",
+      "cardinality": "1:N",
+      "description": "A user can submit multiple copilot queries."
+    },
+    {
+      "from": "rw_copilot_queries",
+      "to": "rw_query_sources",
+      "cardinality": "1:N",
+      "description": "A query can have multiple source messages."
+    },
+    {
+      "from": "rw_messages",
+      "to": "rw_query_sources",
+      "cardinality": "1:N",
+      "description": "A message can be referenced by multiple copilot queries."
+    },
+    {
+      "from": "rw_users",
+      "to": "rw_refresh_tokens",
+      "cardinality": "1:N",
+      "description": "A user can have multiple refresh tokens."
+    }
+  ],
+
+  "business_rules": [
+    {
+      "id": "BR-001",
+      "rule": "A user can only access channels where the user is a member.",
+      "category": "authorization",
+      "critical": true
+    },
+    {
+      "id": "BR-002",
+      "rule": "A user can only read messages from channels the user is authorized to access.",
+      "category": "authorization",
+      "critical": true
+    },
+    {
+      "id": "BR-003",
+      "rule": "A user cannot access private conversation content through an unauthorized channel.",
+      "category": "authorization",
+      "critical": true
+    },
+    {
+      "id": "BR-004",
+      "rule": "Messages are soft deleted instead of physically deleted.",
+      "category": "data_integrity",
+      "critical": true
+    },
+    {
+      "id": "BR-005",
+      "rule": "Users are soft deleted so historical message authorship can be preserved.",
+      "category": "data_integrity",
+      "critical": true
+    },
+    {
+      "id": "BR-006",
+      "rule": "A message must belong to an existing channel.",
+      "category": "referential_integrity",
+      "critical": true
+    },
+    {
+      "id": "BR-007",
+      "rule": "A message must have an existing author.",
+      "category": "referential_integrity",
+      "critical": true
+    },
+    {
+      "id": "BR-008",
+      "rule": "A user must have permission to interact with the channel before creating or modifying messages.",
+      "category": "authorization",
+      "critical": true
+    },
+    {
+      "id": "BR-009",
+      "rule": "Copilot queries belong to the authenticated user.",
+      "category": "authorization",
+      "critical": true
+    },
+    {
+      "id": "BR-010",
+      "rule": "Copilot sources must only reference messages accessible to the requesting user.",
+      "category": "authorization",
+      "critical": true
+    },
+    {
+      "id": "BR-011",
+      "rule": "A relevance score must be between 0 and 1 when provided.",
+      "category": "data_validation",
+      "critical": false
+    },
+    {
+      "id": "BR-012",
+      "rule": "Refresh tokens must expire after their creation timestamp.",
+      "category": "data_validation",
+      "critical": true
+    }
+  ],
+
+  "normalization": {
+    "first_normal_form": {
+      "status": "satisfied",
+      "explanation": "Attributes contain atomic values and repeating groups are represented as separate rows and tables."
+    },
+    "second_normal_form": {
+      "status": "satisfied",
+      "explanation": "Entities with composite keys contain attributes that depend on the complete key. Associative entities such as rw_channel_members, rw_message_status and rw_query_sources contain only attributes dependent on their complete composite key."
+    },
+    "third_normal_form": {
+      "status": "satisfied",
+      "explanation": "Non-key attributes depend on their table's key and relationships between independent entities are represented through foreign keys rather than duplicated descriptive data."
+    }
+  },
+
+  "seed_data": {
+    "users": [
+      {
+        "id": "11111111-1111-1111-1111-111111111111",
+        "email": "ana@riwi.io",
+        "full_name": "Ana Martinez",
+        "role_title": "Backend Developer"
+      },
+      {
+        "id": "22222222-2222-2222-2222-222222222222",
+        "email": "carlos@riwi.io",
+        "full_name": "Carlos Gomez",
+        "role_title": "Frontend Developer"
+      },
+      {
+        "id": "33333333-3333-3333-3333-333333333333",
+        "email": "laura@riwi.io",
+        "full_name": "Laura Rodriguez",
+        "role_title": "Data Analyst"
+      }
+    ],
+
+    "channels": [
+      {
+        "id": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+        "name": "General",
+        "is_private": false
+      },
+      {
+        "id": "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+        "name": "Backend",
+        "is_private": true
+      },
+      {
+        "id": "cccccccc-cccc-cccc-cccc-cccccccccccc",
+        "name": "Frontend",
+        "is_private": true
+      },
+      {
+        "id": "dddddddd-dddd-dddd-dddd-dddddddddddd",
+        "name": "Data",
+        "is_private": true
+      }
+    ],
+
+    "channel_members": [
+      {
+        "channel_id": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+        "user_id": "11111111-1111-1111-1111-111111111111",
+        "role": "admin"
+      },
+      {
+        "channel_id": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+        "user_id": "22222222-2222-2222-2222-222222222222",
+        "role": "member"
+      },
+      {
+        "channel_id": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+        "user_id": "33333333-3333-3333-3333-333333333333",
+        "role": "member"
+      },
+
+      {
+        "channel_id": "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+        "user_id": "11111111-1111-1111-1111-111111111111",
+        "role": "admin"
+      },
+      {
+        "channel_id": "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+        "user_id": "22222222-2222-2222-2222-222222222222",
+        "role": "member"
+      },
+
+      {
+        "channel_id": "cccccccc-cccc-cccc-cccc-cccccccccccc",
+        "user_id": "22222222-2222-2222-2222-222222222222",
+        "role": "admin"
+      },
+      {
+        "channel_id": "cccccccc-cccc-cccc-cccc-cccccccccccc",
+        "user_id": "33333333-3333-3333-3333-333333333333",
+        "role": "member"
+      },
+
+      {
+        "channel_id": "dddddddd-dddd-dddd-dddd-dddddddddddd",
+        "user_id": "33333333-3333-3333-3333-333333333333",
+        "role": "admin"
+      }
+    ]
+  }
+}
